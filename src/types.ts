@@ -42,8 +42,24 @@ export const reviewResultShape = {
 export const reviewResultSchema = z.object(reviewResultShape);
 export type ReviewResult = z.infer<typeof reviewResultSchema>;
 
+/**
+ * A failure the caller can fix (a bad path, a command the repository's policy
+ * forbids). Carries a message meant to be read and acted on, not a stack trace.
+ */
+export class InspectorError extends Error {
+  override readonly name = "InspectorError";
+}
+
+/**
+ * How much the caller is trusted. Required, and with no default, so that every
+ * adapter has to state it: this is the field that decides whether a validation
+ * command reaches a shell.
+ */
+export type CallerTrust = "untrusted-caller" | "trusted-shell-caller";
+
 export type ReviewRequest = {
   repositoryPath: string;
+  callerTrust: CallerTrust;
   baseRef?: string;
   validationCommands?: string[];
 };

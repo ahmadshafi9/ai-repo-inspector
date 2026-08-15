@@ -53,6 +53,9 @@ async function main() {
 
   const result = await reviewRepository({
     repositoryPath: args.repositoryPath,
+    // Whoever can run this binary already has a shell, so the allowlist would
+    // protect nothing. The MCP server, whose caller is a model, does not.
+    callerTrust: "trusted-shell-caller",
     baseRef: args.baseRef,
     validationCommands: args.validations,
   });

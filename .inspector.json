@@ -1,0 +1,3 @@
+{
+  "allowedValidationCommands": ["npm test", "npm run typecheck"]
+}

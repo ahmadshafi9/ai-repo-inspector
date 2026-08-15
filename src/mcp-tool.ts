@@ -30,6 +30,9 @@ export type ReviewToolInput = z.infer<z.ZodObject<typeof reviewToolInputShape>>;
 export function toReviewRequest(input: ReviewToolInput): ReviewRequest {
   return {
     repositoryPath: input.repo_path,
+    // The caller is a model that may have read attacker-influenced content from
+    // the repository it is asking about. It never gets a shell.
+    callerTrust: "untrusted-caller",
     baseRef: input.base_ref,
     validationCommands: input.validation_commands,
   };

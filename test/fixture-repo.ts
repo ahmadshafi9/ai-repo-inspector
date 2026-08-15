@@ -1,15 +1,21 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+type FixtureOptions = {
+  /** Written to `.inspector.json`; omit to leave the repository without a policy. */
+  allowedValidationCommands?: string[];
+};
 
 /**
  * Creates a throwaway Git repository with a `main` base commit and a `feature`
  * branch that modifies one file and adds another. Returns its path; the caller
  * is responsible for `removeFixtureRepo`.
  */
-export function createFixtureRepo(): string {
-  const directory = mkdtempSync(join(tmpdir(), "inspector-fixture-"));
+export function createFixtureRepo(options: FixtureOptions = {}): string {
+  // Real path, because git reports the resolved one and /tmp is a symlink on macOS.
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "inspector-fixture-")));
   const git = (...args: string[]) => execFileSync("git", args, { cwd: directory, stdio: "pipe" });
 
   git("init", "-b", "main");
@@ -24,6 +30,13 @@ export function createFixtureRepo(): string {
   writeFileSync(join(directory, "added.txt"), "new\n");
   git("add", ".");
   git("commit", "-m", "feature");
+
+  if (options.allowedValidationCommands) {
+    writeFileSync(
+      join(directory, ".inspector.json"),
+      JSON.stringify({ allowedValidationCommands: options.allowedValidationCommands }),
+    );
+  }
 
   return directory;
 }

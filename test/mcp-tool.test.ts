@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -51,7 +54,9 @@ describe("review_repository input contract", () => {
 describe("review_repository over MCP", () => {
   let repository: string;
   beforeAll(() => {
-    repository = createFixtureRepo();
+    repository = createFixtureRepo({
+      allowedValidationCommands: ["node --version", "node -e process.exit(1)"],
+    });
   });
   afterAll(() => removeFixtureRepo(repository));
 
@@ -76,7 +81,7 @@ describe("review_repository over MCP", () => {
 
     const result = await client.callTool({
       name: "review_repository",
-      arguments: { repo_path: repository, validation_commands: ["exit 1"] },
+      arguments: { repo_path: repository, validation_commands: ["node -e process.exit(1)"] },
     });
 
     // The client validates `structuredContent` against the tool's advertised
@@ -84,6 +89,49 @@ describe("review_repository over MCP", () => {
     const payload = reviewResultSchema.parse(result.structuredContent);
     expect(payload.repositoryPath).toBe(repository);
     expect(payload.validation.status).toBe("failed");
+  });
+
+  it("refuses a validation command the repository has not allowlisted", async () => {
+    const client = await connectedClient();
+
+    const result = await client.callTool({
+      name: "review_repository",
+      arguments: { repo_path: repository, validation_commands: ["touch pwned.txt"] },
+    });
+
+    const text = (result.content as { type: string; text: string }[])[0].text;
+    expect(result.isError).toBe(true);
+    expect(text).toContain(".inspector.json");
+    expect(text).toContain("allowedValidationCommands");
+    expect(existsSync(join(repository, "pwned.txt"))).toBe(false);
+  });
+
+  it("refuses an allowlisted command with anything appended to it", async () => {
+    const client = await connectedClient();
+
+    const result = await client.callTool({
+      name: "review_repository",
+      arguments: {
+        repo_path: repository,
+        validation_commands: ["node --version; touch pwned.txt"],
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(existsSync(join(repository, "pwned.txt"))).toBe(false);
+  });
+
+  it("refuses a path that is not a Git work tree", async () => {
+    const client = await connectedClient();
+
+    const result = await client.callTool({
+      name: "review_repository",
+      arguments: { repo_path: tmpdir() },
+    });
+
+    const text = (result.content as { type: string; text: string }[])[0].text;
+    expect(result.isError).toBe(true);
+    expect(text).toContain("not inside a Git work tree");
   });
 
   it("rejects a call that omits the required path", async () => {

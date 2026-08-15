@@ -45,16 +45,7 @@ npm run typecheck
 npm test
 ```
 
-## CLI
-
-```bash
-npm run inspector -- review --repo ./path/to/repo --format markdown
-npm run inspector -- review --repo ./path/to/repo --validate "npm test"
-```
-
-The report is written to `review-report.md`.
-
-## MCP
+## MCP (the production interface)
 
 Start the stdio server with:
 
@@ -62,20 +53,62 @@ Start the stdio server with:
 npm run mcp-server
 ```
 
-It exposes a `review_repository` tool. Inspect the implementation to determine
-its current input contract and whether it is suitable for the production model
-you propose.
+It exposes one tool, `review_repository`:
+
+| input | required | meaning |
+| --- | --- | --- |
+| `repo_path` | yes | Path inside the Git work tree to inspect. |
+| `base_ref` | no | Ref to diff `HEAD` against. Defaults to `main`. |
+| `validation_commands` | no | Commands to run in the repository. Allowlisted only — see below. |
+
+The tool returns a structured `ReviewResult` as `structuredContent`, validated
+against the advertised `outputSchema`, plus a Markdown rendering of the same
+information as text.
+
+### Validation policy
+
+The MCP caller is a model that may have read attacker-influenced content from
+the repository it is inspecting, so it never reaches a shell. Validation
+commands run via `execFile` as argv vectors, and each must match an entry of
+`.inspector.json`, committed in the repository being inspected, **exactly**:
+
+```json
+{ "allowedValidationCommands": ["npm test", "npm run typecheck"] }
+```
+
+If that file is absent, empty or malformed, every validation command is
+rejected with an error naming the file and the key it needs. There is no
+permissive fallback, and no prefix or argument-appending match: `npm test
+--silent` is a different command from `npm test`.
+
+## CLI (development only)
+
+The CLI is a debugging wrapper over the same core. It is **not** the production
+interface: it is not hardened and its flags carry no stability guarantee.
+
+```bash
+npm run inspector -- review --repo ./path/to/repo --format markdown
+npm run inspector -- review --repo ./path/to/repo --validate "npm test"
+```
+
+The report is written to `review-report.md`, or `review-report.json` for
+`--format json`. Its caller already has a shell, so `--validate` accepts
+arbitrary commands and ignores `.inspector.json`. That asymmetry is deliberate
+and lives in one required field, `ReviewRequest.callerTrust`.
 
 ## Project layout
 
 ```text
-src/core.ts         shared review orchestration
-src/cli.ts          command-line adapter
-src/mcp-server.ts   MCP adapter
+src/core.ts         shared review orchestration, returns a ReviewResult
+src/types.ts        the result contract, as Zod schemas
+src/policy.ts       which validation commands a caller may run
 src/git.ts          Git inspection
 src/validation.ts   validation execution
-src/report.ts       Markdown report generation
-test/               public starter tests
+src/report.ts       Markdown rendering of a ReviewResult
+src/mcp-tool.ts     MCP tool contract (production adapter)
+src/mcp-server.ts   stdio transport wiring
+src/cli.ts          command-line adapter (development only)
+test/               tests
 ```
 
 When finished, submit via **Security → Report a vulnerability** on this
