@@ -13,6 +13,9 @@ export function markdownReport(result: ReviewResult): string {
   for (const file of result.changes.files) {
     lines.push(`- ${file.path} (${file.status})`);
   }
+  if (result.changes.truncated) {
+    lines.push(`- ... ${result.changes.totalFiles - result.changes.files.length} more not shown`);
+  }
 
   lines.push("", `## Validation: ${result.validation.status}`);
   for (const validation of result.validation.results) {
@@ -23,6 +26,9 @@ export function markdownReport(result: ReviewResult): string {
       validation.output,
       "```",
     );
+    if (validation.outputTruncated) {
+      lines.push(`(output truncated from ${validation.outputChars} characters)`);
+    }
   }
   return lines.join("\n");
 }

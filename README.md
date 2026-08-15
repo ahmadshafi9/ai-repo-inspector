@@ -65,6 +65,12 @@ The tool returns a structured `ReviewResult` as `structuredContent`, validated
 against the advertised `outputSchema`, plus a Markdown rendering of the same
 information as text.
 
+Output is bounded so that a large diff or a chatty test suite cannot flood the
+caller's context: at most 500 changed files and 8000 characters of output per
+validation command, each validation command capped at 120s. Whenever a bound
+bites, the payload says so — `changes.truncated` with `changes.totalFiles`, and
+`outputTruncated` with `outputChars`. Nothing is dropped silently.
+
 ### Validation policy
 
 The MCP caller is a model that may have read attacker-influenced content from
@@ -95,6 +101,22 @@ The report is written to `review-report.md`, or `review-report.json` for
 `--format json`. Its caller already has a shell, so `--validate` accepts
 arbitrary commands and ignores `.inspector.json`. That asymmetry is deliberate
 and lives in one required field, `ReviewRequest.callerTrust`.
+
+## Known limitations
+
+Deliberately out of scope so far; each is a real defect, not an unknown:
+
+- `--repo` in the CLI truncates its argument at the first space, so a path
+  containing one selects the wrong repository.
+- `base_ref` defaults to `main` with no detection of the repository's actual
+  default branch, so a `master` repository errors.
+- Renamed files are parsed from `git diff --name-status` as a single fused path
+  and reported as `modified`.
+- Untracked files are never reported, although `ChangedFile.status` has an
+  `"untracked"` variant.
+- Errors other than the ones raised deliberately (bad path, forbidden command)
+  still surface as raw Node exceptions.
+- Only file names are collected, never diff content.
 
 ## Project layout
 

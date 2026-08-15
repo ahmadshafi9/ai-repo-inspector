@@ -20,7 +20,9 @@ export const validationResultSchema = z.object({
     .number()
     .nullable()
     .describe("Process exit code, or null when the command was killed before exiting."),
-  output: z.string().describe("Combined stdout and stderr."),
+  output: z.string().describe("Combined stdout and stderr, possibly truncated."),
+  outputTruncated: z.boolean().describe("True when `output` is an excerpt rather than the whole."),
+  outputChars: z.number().int().describe("Length of the untruncated output, in characters."),
 });
 export type ValidationResult = z.infer<typeof validationResultSchema>;
 
@@ -31,6 +33,8 @@ export const reviewResultShape = {
   changes: z.object({
     baseRef: z.string().describe("The ref HEAD was diffed against."),
     files: z.array(changedFileSchema),
+    truncated: z.boolean().describe("True when `files` lists only some of the changed files."),
+    totalFiles: z.number().int().describe("Number of changed files before any truncation."),
   }),
   validation: z.object({
     status: z

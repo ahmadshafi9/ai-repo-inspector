@@ -22,13 +22,13 @@ export async function reviewRepository(request: ReviewRequest): Promise<ReviewRe
   const baseRef = request.baseRef ?? DEFAULT_BASE_REF;
   const commands = authorize(request.validationCommands ?? [], repositoryPath, request.callerTrust);
 
-  const files = changedFiles(repositoryPath, baseRef);
+  const changes = changedFiles(repositoryPath, baseRef);
   const results = await runValidations(commands, repositoryPath);
 
   return {
     schemaVersion: 1,
     repositoryPath,
-    changes: { baseRef, files },
+    changes: { baseRef, ...changes },
     validation: { status: summarize(results), results },
   };
 }

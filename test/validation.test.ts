@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AuthorizedCommand } from "../src/policy.js";
-import { runValidation, runValidations } from "../src/validation.js";
+import {
+  DEFAULT_VALIDATION_LIMITS,
+  runValidation,
+  runValidations,
+} from "../src/validation.js";
 
 const shell = (command: string): AuthorizedCommand => ({ command, execution: "shell" });
 const argv = (...parts: string[]): AuthorizedCommand => ({
@@ -42,8 +46,8 @@ describe("runValidation", () => {
 
   it("kills a command that exceeds its time budget and says so", async () => {
     const result = await runValidation(shell("sleep 5"), cwd, {
+      ...DEFAULT_VALIDATION_LIMITS,
       timeoutMs: 150,
-      maxBufferBytes: 1000,
     });
 
     expect(result).toMatchObject({ status: "failed", exitCode: null });
@@ -55,6 +59,24 @@ describe("runValidation", () => {
 
     expect(result.output).toBe("a; touch pwned.txt");
     expect(existsSync(join(cwd, "pwned.txt"))).toBe(false);
+  });
+
+  it("bounds long output, keeping both ends, and says how much was dropped", async () => {
+    const result = await runValidation(
+      shell("printf 'A%.0s' $(seq 1 500); printf 'Z%.0s' $(seq 1 500)"),
+      cwd,
+      { ...DEFAULT_VALIDATION_LIMITS, maxOutputChars: 100 },
+    );
+
+    expect(result.outputTruncated).toBe(true);
+    expect(result.outputChars).toBe(1000);
+    expect(result.output).toMatch(/^A{50}\n\[\.\.\. 900 characters omitted \.\.\.\]\nZ{50}$/);
+  });
+
+  it("does not flag short output as truncated", async () => {
+    const result = await runValidation(shell("echo hello"), cwd);
+
+    expect(result).toMatchObject({ outputTruncated: false, outputChars: 5 });
   });
 
   it("keeps running later commands after an earlier one fails", async () => {

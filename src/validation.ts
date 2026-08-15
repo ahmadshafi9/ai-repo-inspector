@@ -7,11 +7,14 @@ export type ValidationLimits = {
   timeoutMs: number;
   /** Hard cap on captured stdio, so a chatty command cannot exhaust memory. */
   maxBufferBytes: number;
+  /** Cap on the output kept in the result, so a chatty command cannot flood a context window. */
+  maxOutputChars: number;
 };
 
 export const DEFAULT_VALIDATION_LIMITS: ValidationLimits = {
   timeoutMs: 120_000,
-  maxBufferBytes: 1_000_000,
+  maxBufferBytes: 8 * 1024 * 1024,
+  maxOutputChars: 8_000,
 };
 
 /**
@@ -33,13 +36,14 @@ export function runValidation(
     const options = { cwd, timeout: limits.timeoutMs, maxBuffer: limits.maxBufferBytes };
     const done = (error: (Error & { code?: unknown; killed?: boolean }) | null, stdout: string, stderr: string) => {
       const notes = error?.killed ? [`[timed out after ${limits.timeoutMs}ms]`] : [];
+      const output = [stdout, stderr, ...notes].filter(Boolean).join("\n").trim();
       resolve({
         command: authorized.command,
         status: error ? "failed" : "passed",
         // `code` is a string (e.g. ERR_CHILD_PROCESS_STDIO_MAXBUFFER) when the
         // child was killed rather than exited, in which case there is no code.
         exitCode: error ? (typeof error.code === "number" ? error.code : null) : 0,
-        output: [stdout, stderr, ...notes].filter(Boolean).join("\n").trim(),
+        ...bound(output, limits.maxOutputChars),
       });
     };
 
@@ -50,6 +54,27 @@ export function runValidation(
       exec(authorized.command, options, done);
     }
   });
+}
+
+/**
+ * Keeps the head and the tail of long output: the first failure tends to be at
+ * one end and the summary at the other, and dropping either loses the point.
+ */
+function bound(
+  output: string,
+  maxChars: number,
+): Pick<ValidationResult, "output" | "outputTruncated" | "outputChars"> {
+  if (output.length <= maxChars) {
+    return { output, outputTruncated: false, outputChars: output.length };
+  }
+  const head = output.slice(0, Math.ceil(maxChars / 2));
+  const tail = output.slice(-Math.floor(maxChars / 2));
+  const omitted = output.length - maxChars;
+  return {
+    output: `${head}\n[... ${omitted} characters omitted ...]\n${tail}`,
+    outputTruncated: true,
+    outputChars: output.length,
+  };
 }
 
 export async function runValidations(
