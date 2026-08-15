@@ -1,7 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { reviewRepository } from "./core.js";
-import type { ReviewRequest } from "./types.js";
+import { markdownReport } from "./report.js";
+import { reviewResultShape, type ReviewRequest } from "./types.js";
 
 /**
  * The advertised input contract of the `review_repository` tool.
@@ -41,10 +42,16 @@ export function registerReviewTool(server: McpServer): void {
       title: "Review repository",
       description: "Inspects a Git repository and returns a review report.",
       inputSchema: reviewToolInputShape,
+      outputSchema: reviewResultShape,
     },
     async (input) => {
-      const report = await reviewRepository(toReviewRequest(input));
-      return { content: [{ type: "text" as const, text: report }] };
+      const result = await reviewRepository(toReviewRequest(input));
+      return {
+        // `structuredContent` is the contract; the Markdown mirror carries the
+        // same information for clients that only render text, as the spec asks.
+        structuredContent: result,
+        content: [{ type: "text" as const, text: markdownReport(result) }],
+      };
     },
   );
 }

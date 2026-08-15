@@ -8,9 +8,8 @@ function git(repositoryPath: string, args: string[]): string {
   }).trim();
 }
 
-export function changedFiles(repositoryPath: string, baseRef?: string): ChangedFile[] {
-  const base = baseRef ?? "main";
-  const output = git(repositoryPath, ["diff", "--name-status", `${base}...HEAD`]);
+export function changedFiles(repositoryPath: string, baseRef: string): ChangedFile[] {
+  const output = git(repositoryPath, ["diff", "--name-status", `${baseRef}...HEAD`]);
 
   return output
     .split("\n")

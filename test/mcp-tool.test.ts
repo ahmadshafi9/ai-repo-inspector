@@ -3,6 +3,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { registerReviewTool, reviewToolInputShape, toReviewRequest } from "../src/mcp-tool.js";
+import { reviewResultSchema } from "../src/types.js";
 import { createFixtureRepo, removeFixtureRepo } from "./fixture-repo.js";
 
 async function connectedClient(): Promise<Client> {
@@ -68,6 +69,21 @@ describe("review_repository over MCP", () => {
     expect(text).toContain(repository);
     expect(text).toContain("added.txt (added)");
     expect(text).toContain("base.txt (modified)");
+  });
+
+  it("returns a structured payload that satisfies the advertised output schema", async () => {
+    const client = await connectedClient();
+
+    const result = await client.callTool({
+      name: "review_repository",
+      arguments: { repo_path: repository, validation_commands: ["exit 1"] },
+    });
+
+    // The client validates `structuredContent` against the tool's advertised
+    // outputSchema, so reaching this line already proves they agree.
+    const payload = reviewResultSchema.parse(result.structuredContent);
+    expect(payload.repositoryPath).toBe(repository);
+    expect(payload.validation.status).toBe("failed");
   });
 
   it("rejects a call that omits the required path", async () => {

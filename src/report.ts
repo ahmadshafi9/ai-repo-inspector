@@ -1,20 +1,28 @@
-import type { ChangedFile, ValidationResult } from "./types.js";
+import type { ReviewResult } from "./types.js";
 
-type ReportInput = {
-  repositoryPath: string;
-  changedFiles: ChangedFile[];
-  validationResults: ValidationResult[];
-};
-
-export function markdownReport(input: ReportInput): string {
-  const lines = [`# Review Report: ${input.repositoryPath}`, "", "## Changed files"];
-  for (const file of input.changedFiles) {
+/**
+ * Pure renderer over the structured result. Adapters call it; the core does
+ * not, so Markdown is never the only representation of a review.
+ */
+export function markdownReport(result: ReviewResult): string {
+  const lines = [
+    `# Review Report: ${result.repositoryPath}`,
+    "",
+    `## Changed files (vs ${result.changes.baseRef})`,
+  ];
+  for (const file of result.changes.files) {
     lines.push(`- ${file.path} (${file.status})`);
   }
-  lines.push("", "## Validation output");
-  for (const result of input.validationResults) {
-    const exit = result.exitCode === null ? "killed" : `exit ${result.exitCode}`;
-    lines.push(`### ${result.command} — ${result.status} (${exit})`, "```", result.output, "```");
+
+  lines.push("", `## Validation: ${result.validation.status}`);
+  for (const validation of result.validation.results) {
+    const exit = validation.exitCode === null ? "killed" : `exit ${validation.exitCode}`;
+    lines.push(
+      `### ${validation.command} — ${validation.status} (${exit})`,
+      "```",
+      validation.output,
+      "```",
+    );
   }
   return lines.join("\n");
 }
